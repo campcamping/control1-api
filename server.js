@@ -20,7 +20,6 @@ app.get("/", (req, res) => {
   res.json({ status: "ok" });
 });
 
-
 // ======================================================
 // ZONES
 // ======================================================
@@ -41,11 +40,11 @@ app.get("/api/zones", async (req, res) => {
 
 // CREATE ZONE
 app.post("/api/zone/create", async (req, res) => {
-  const { game_id, name } = req.body;
+  const { game_id, name, zone_code } = req.body;
 
   const { data, error } = await supabase
     .from("zones")
-    .insert([{ game_id, name }])
+    .insert([{ game_id, name, zone_code }])
     .select()
     .single();
 
@@ -57,7 +56,7 @@ app.post("/api/zone/create", async (req, res) => {
 // UPDATE ZONE (MAIN CONTROL)
 app.post("/api/zone/update", async (req, res) => {
   const {
-    zone_id,
+    zone_code,
     master_volume,
     muted,
     current_asset_id,
@@ -84,15 +83,18 @@ app.post("/api/zone/update", async (req, res) => {
   res.json({ success: true });
 });
 
+// ======================================================
+// PARTY MODE
+// ======================================================
 app.post("/api/party/activate", async (req, res) => {
   const { group_id } = req.body;
 
   const { data: zones } = await supabase
     .from("zone_group_members")
-    .select("zone_id")
+    .select("zone_code")
     .eq("group_id", group_id);
 
-  const zoneIds = zones.map(z => z.zone_id);
+  const zoneCodes = zones.map(z => z.zone_code);
 
   const { error } = await supabase
     .from("zones")
@@ -100,39 +102,36 @@ app.post("/api/party/activate", async (req, res) => {
       muted: false,
       master_volume: 70
     })
-    .in("id", zoneIds);
+    .in("zone_code", zoneCodes);
 
   if (error) return res.status(500).json({ error });
 
   res.json({ success: true });
 });
 
-
 // ======================================================
-// ZONE MEMBERS (NEW CORE SYSTEM)
+// ZONE MEMBERS
 // ======================================================
 
-// ADD AMP TO ZONE
 app.post("/api/zone/member/add", async (req, res) => {
-  const { zone_id, amp_id } = req.body;
+  const { zone_code, amp_id } = req.body;
 
   const { error } = await supabase
     .from("zone_members")
-    .insert([{ zone_id, amp_id }]);
+    .insert([{ zone_code, amp_id }]);
 
   if (error) return res.status(500).json({ error });
 
   res.json({ success: true });
 });
 
-// REMOVE AMP FROM ZONE
 app.post("/api/zone/member/remove", async (req, res) => {
-  const { zone_id, amp_id } = req.body;
+  const { zone_code, amp_id } = req.body;
 
   const { error } = await supabase
     .from("zone_members")
     .delete()
-    .eq("zone_id", zone_id)
+    .eq("zone_code", zone_code)
     .eq("amp_id", amp_id);
 
   if (error) return res.status(500).json({ error });
@@ -140,9 +139,8 @@ app.post("/api/zone/member/remove", async (req, res) => {
   res.json({ success: true });
 });
 
-
 // ======================================================
-// GET FULL ZONE STATE (IMPORTANT NEW ENDPOINT)
+// GET ZONE STATE
 // ======================================================
 app.get("/api/zone/state", async (req, res) => {
   const { zone_code } = req.query;
@@ -155,17 +153,18 @@ app.get("/api/zone/state", async (req, res) => {
 
   if (error) return res.status(500).json({ error });
 
-  const { data: members } = await supabase
+  const { data: members, error: mErr } = await supabase
     .from("zone_members")
     .select("*")
     .eq("zone_code", zone_code);
 
+  if (mErr) return res.status(500).json({ error: mErr });
+
   res.json({ zone, members });
 });
 
-
 // ======================================================
-// HEARTBEAT (ROBLOX)
+// HEARTBEAT
 // ======================================================
 app.post("/api/heartbeat", async (req, res) => {
   const { game_id, amp_id } = req.body;
@@ -184,6 +183,9 @@ app.post("/api/heartbeat", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ======================================================
+// GROUPS
+// ======================================================
 app.post("/api/group/create", async (req, res) => {
   const { game_id, name, master_zone_id } = req.body;
 
@@ -199,23 +201,26 @@ app.post("/api/group/create", async (req, res) => {
 });
 
 app.post("/api/group/add-zone", async (req, res) => {
-  const { group_id, zone_id } = req.body;
+  const { group_id, zone_code } = req.body;
 
   const { error } = await supabase
     .from("zone_group_members")
-    .insert([{ group_id, zone_id }]);
+    .insert([{ group_id, zone_code }]);
 
   if (error) return res.status(500).json({ error });
 
   res.json({ success: true });
 });
 
+// ======================================================
+// QUEUE SYSTEM
+// ======================================================
 app.post("/api/queue/add", async (req, res) => {
-  const { zone_id, asset_id, title } = req.body;
+  const { zone_code, asset_id, title } = req.body;
 
   const { data, error } = await supabase
     .from("zone_queue")
-    .insert([{ zone_id, asset_id, title }])
+    .insert([{ zone_code, asset_id, title }])
     .select()
     .single();
 
@@ -225,12 +230,12 @@ app.post("/api/queue/add", async (req, res) => {
 });
 
 app.post("/api/queue/next", async (req, res) => {
-  const { zone_id } = req.body;
+  const { zone_code } = req.body;
 
   const { data: queue } = await supabase
     .from("zone_queue")
     .select("*")
-    .eq("zone_id", zone_id)
+    .eq("zone_code", zone_code)
     .order("position");
 
   if (!queue || queue.length === 0)
@@ -254,7 +259,7 @@ app.post("/api/queue/next", async (req, res) => {
 });
 
 // ======================================================
-// CLEANUP OFFLINE AMPS
+// CLEANUP
 // ======================================================
 setInterval(async () => {
   const cutoff = new Date(Date.now() - 60000).toISOString();
@@ -265,34 +270,7 @@ setInterval(async () => {
     .lt("last_seen", cutoff);
 
   if (error) console.error("cleanup error:", error);
-
 }, 10000);
-
-setInterval(async () => {
-  const { data: zones } = await supabase
-    .from("zones")
-    .select("*");
-
-  for (const zone of zones) {
-    if (!zone.playback?.is_playing) continue;
-
-    const started = new Date(zone.playback.started_at).getTime();
-    const now = Date.now();
-
-    const position = (now - started) / 1000;
-
-    // periodic correction write
-    await supabase
-      .from("zones")
-      .update({
-        playback: {
-          ...zone.playback,
-          position: position
-        }
-      })
-      .eq("id", zone.id);
-  }
-}, 5000);
 
 // ======================================================
 app.listen(PORT, () => {
