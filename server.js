@@ -69,10 +69,22 @@ app.post("/api/update", async (req, res) => {
 })
 
 app.get("/api/amplifiers", async (req, res) => {
-  const { data } = await supabase
+  const { game_id } = req.query
+
+  let query = supabase
     .from("amplifiers")
     .select("*")
     .order("zone")
+
+  if (game_id) {
+    query = query.eq("game_id", game_id)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    return res.status(500).json(error)
+  }
 
   res.json(data)
 })
@@ -91,12 +103,16 @@ app.post("/api/play", async (req, res) => {
 })
 
 setInterval(async () => {
-  const cutoff = new Date(Date.now() - 15000) // 15 sec
+  const cutoff = new Date(Date.now() - 15000)
 
-  await supabase
+  const { error } = await supabase
     .from("amplifiers")
     .update({ online: false })
     .lt("last_seen", cutoff)
+
+  if (error) {
+    console.error("Offline cleanup error:", error)
+  }
 }, 5000)
 
 const PORT = process.env.PORT || 3001
