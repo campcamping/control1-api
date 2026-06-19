@@ -47,11 +47,34 @@ app.get("/api/zones", async (req, res) => {
 
 // CREATE ZONE
 app.post("/api/zone/create", async (req, res) => {
-  const { game_id, name, zone_code } = req.body;
+  const { game_id, name } = req.body;
+
+  if (!game_id || !name) {
+    return res.status(400).json({ error: "game_id and name required" });
+  }
+
+  // auto-generate clean zone_code
+  const zone_code = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, "-");
 
   const { data, error } = await supabase
     .from("zones")
-    .insert([{ game_id, name, zone_code }])
+    .insert([
+      {
+        game_id,
+        name,
+        zone_code,
+        master_volume: 50,
+        muted: false,
+        current_asset_id: null,
+        bass: 0,
+        treble: 0,
+        playback: { is_playing: false }
+      }
+    ])
     .select()
     .single();
 
