@@ -83,6 +83,15 @@ app.post("/api/play", async (req, res) => {
   res.json({ success: true })
 })
 
+setInterval(async () => {
+  const cutoff = new Date(Date.now() - 15000) // 15 sec
+
+  await supabase
+    .from("amplifiers")
+    .update({ online: false })
+    .lt("last_seen", cutoff)
+}, 5000)
+
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
