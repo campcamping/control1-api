@@ -16,12 +16,12 @@ const supabase = createClient(
 )
 
 app.post("/api/register", async (req, res) => {
-  const { amp_id, name, zone } = req.body
+  const { game_id, amp_id, name, zone } = req.body
 
-  // insert amp
   const { error } = await supabase
     .from("amplifiers")
     .upsert({
+      game_id,
       amp_id,
       name,
       zone,
@@ -29,10 +29,16 @@ app.post("/api/register", async (req, res) => {
       last_seen: new Date()
     })
 
-  // auto-create zone if it doesn't exist
+  if (error) {
+    console.log("SUPABASE ERROR:", error)
+  }
+
   await supabase
     .from("zones")
-    .upsert({ name: zone })
+    .upsert({
+      game_id,
+      name: zone
+    })
 
   res.json({ success: true })
 })
