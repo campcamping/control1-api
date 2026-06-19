@@ -157,6 +157,74 @@ app.post("/api/heartbeat", async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/group/create", async (req, res) => {
+  const { game_id, name, master_zone_id } = req.body;
+
+  const { data, error } = await supabase
+    .from("zone_groups")
+    .insert([{ game_id, name, master_zone_id }])
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+app.post("/api/group/add-zone", async (req, res) => {
+  const { group_id, zone_id } = req.body;
+
+  const { error } = await supabase
+    .from("zone_group_members")
+    .insert([{ group_id, zone_id }]);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
+app.post("/api/queue/add", async (req, res) => {
+  const { zone_id, asset_id, title } = req.body;
+
+  const { data, error } = await supabase
+    .from("zone_queue")
+    .insert([{ zone_id, asset_id, title }])
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+app.post("/api/queue/next", async (req, res) => {
+  const { zone_id } = req.body;
+
+  const { data: queue } = await supabase
+    .from("zone_queue")
+    .select("*")
+    .eq("zone_id", zone_id)
+    .order("position");
+
+  if (!queue || queue.length === 0)
+    return res.json({ message: "empty queue" });
+
+  const next = queue[0];
+
+  await supabase
+    .from("zones")
+    .update({
+      current_asset_id: next.asset_id
+    })
+    .eq("id", zone_id);
+
+  await supabase
+    .from("zone_queue")
+    .delete()
+    .eq("id", next.id);
+
+  res.json(next);
+});
 
 // ======================================================
 // CLEANUP OFFLINE AMPS
