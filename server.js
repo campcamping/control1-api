@@ -56,7 +56,15 @@ app.post("/api/zone/create", async (req, res) => {
 
 // UPDATE ZONE (MAIN CONTROL)
 app.post("/api/zone/update", async (req, res) => {
-  const { zone_id, master_volume, muted, current_asset_id } = req.body;
+  const {
+    zone_id,
+    master_volume,
+    muted,
+    current_asset_id,
+    bass,
+    treble,
+    playback
+  } = req.body;
 
   const { error } = await supabase
     .from("zones")
@@ -64,9 +72,35 @@ app.post("/api/zone/update", async (req, res) => {
       master_volume,
       muted,
       current_asset_id,
+      bass,
+      treble,
+      playback,
       updated_at: new Date().toISOString()
     })
     .eq("id", zone_id);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
+app.post("/api/party/activate", async (req, res) => {
+  const { group_id } = req.body;
+
+  const { data: zones } = await supabase
+    .from("zone_group_members")
+    .select("zone_id")
+    .eq("group_id", group_id);
+
+  const zoneIds = zones.map(z => z.zone_id);
+
+  const { error } = await supabase
+    .from("zones")
+    .update({
+      muted: false,
+      master_volume: 70
+    })
+    .in("id", zoneIds);
 
   if (error) return res.status(500).json({ error });
 
@@ -241,6 +275,31 @@ setInterval(async () => {
 
 }, 10000);
 
+setInterval(async () => {
+  const { data: zones } = await supabase
+    .from("zones")
+    .select("*");
+
+  for (const zone of zones) {
+    if (!zone.playback?.is_playing) continue;
+
+    const started = new Date(zone.playback.started_at).getTime();
+    const now = Date.now();
+
+    const position = (now - started) / 1000;
+
+    // periodic correction write
+    await supabase
+      .from("zones")
+      .update({
+        playback: {
+          ...zone.playback,
+          position: position
+        }
+      })
+      .eq("id", zone.id);
+  }
+}, 5000);
 
 // ======================================================
 app.listen(PORT, () => {
