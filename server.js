@@ -1,146 +1,180 @@
-require("dotenv").config()
+import express from "express";
+import cors from "cors";
+import { createClient } from "@supabase/supabase-js";
 
-const express = require("express")
-const cors = require("cors")
-
-const { createClient } = require("@supabase/supabase-js")
-
-const app = express()
-
-app.use(cors())
-app.use(express.json())
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-)
+  process.env.SUPABASE_ANON_KEY
+);
 
-app.post("/api/register", async (req, res) => {
-  const { game_id, amp_id, name, zone } = req.body
+const PORT = process.env.PORT || 3000;
+
+// =====================
+// HEALTH
+// =====================
+app.get("/", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+
+// ======================================================
+// ZONES
+// ======================================================
+
+// GET ZONES
+app.get("/api/zones", async (req, res) => {
+  const { game_id } = req.query;
+
+  const { data, error } = await supabase
+    .from("zones")
+    .select("*")
+    .eq("game_id", game_id);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+// CREATE ZONE
+app.post("/api/zone/create", async (req, res) => {
+  const { game_id, name } = req.body;
+
+  const { data, error } = await supabase
+    .from("zones")
+    .insert([{ game_id, name }])
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+// UPDATE ZONE (MAIN CONTROL)
+app.post("/api/zone/update", async (req, res) => {
+  const { zone_id, master_volume, muted, current_asset_id } = req.body;
+
+  const { error } = await supabase
+    .from("zones")
+    .update({
+      master_volume,
+      muted,
+      current_asset_id,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", zone_id);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
+
+// ======================================================
+// ZONE MEMBERS (NEW CORE SYSTEM)
+// ======================================================
+
+// ADD AMP TO ZONE
+app.post("/api/zone/member/add", async (req, res) => {
+  const { zone_id, amp_id } = req.body;
+
+  const { error } = await supabase
+    .from("zone_members")
+    .insert([{ zone_id, amp_id }]);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
+// REMOVE AMP FROM ZONE
+app.post("/api/zone/member/remove", async (req, res) => {
+  const { zone_id, amp_id } = req.body;
+
+  const { error } = await supabase
+    .from("zone_members")
+    .delete()
+    .eq("zone_id", zone_id)
+    .eq("amp_id", amp_id);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
+
+// ======================================================
+// GET FULL ZONE STATE (IMPORTANT NEW ENDPOINT)
+// ======================================================
+app.get("/api/zone/state", async (req, res) => {
+  const { zone_id } = req.query;
+
+  // zone
+  const { data: zone, error: zoneError } = await supabase
+    .from("zones")
+    .select("*")
+    .eq("id", zone_id)
+    .single();
+
+  if (zoneError) return res.status(500).json({ error: zoneError });
+
+  // members
+  const { data: members, error: memberError } = await supabase
+    .from("zone_members")
+    .select("*")
+    .eq("zone_id", zone_id);
+
+  if (memberError) return res.status(500).json({ error: memberError });
+
+  res.json({
+    zone,
+    members
+  });
+});
+
+
+// ======================================================
+// HEARTBEAT (ROBLOX)
+// ======================================================
+app.post("/api/heartbeat", async (req, res) => {
+  const { game_id, amp_id } = req.body;
 
   const { error } = await supabase
     .from("amplifiers")
-    .upsert({
-      game_id,
-      amp_id,
-      name,
-      zone,
-      online: true,
-      last_seen: new Date().toISOString()
-    })
-
-  if (error) {
-    console.log("SUPABASE ERROR:", error)
-  }
-
-  await supabase
-    .from("zones")
-    .upsert({
-      game_id,
-      name: zone
-    })
-
-  res.json({ success: true })
-})
-
-app.post("/api/update", async (req, res) => {
-  try {
-    const { game_id, amp_id, volume, muted, bass, treble, current_asset_id } = req.body
-
-    console.log("UPDATE REQUEST:", req.body)
-
-    const updateData = {
-      online: true,
-      last_seen: new Date().toISOString()
-    }
-
-    if (volume !== undefined) updateData.volume = volume
-    if (muted !== undefined) updateData.muted = muted
-    if (bass !== undefined) updateData.bass = bass
-    if (treble !== undefined) updateData.treble = treble
-    if (current_asset_id !== undefined) updateData.current_asset_id = current_asset_id
-
-    const { data, error } = await supabase
-      .from("amplifiers")
-      .update(updateData)
-      .eq("game_id", game_id)
-      .eq("amp_id", amp_id)
-
-    if (error) {
-      console.log("SUPABASE ERROR:", error)
-      return res.status(500).json({ error })
-    }
-
-    return res.json({
-      success: true,
-      data
-    })
-
-  } catch (err) {
-    console.log("SERVER CRASH:", err)
-    return res.status(500).json({
-      error: err.message
-    })
-  }
-})
-
-app.get("/api/amplifiers", async (req, res) => {
-  const { game_id } = req.query
-
-  let query = supabase
-    .from("amplifiers")
-    .select("*")
-    .order("zone")
-
-  if (game_id) {
-    query = query.eq("game_id", game_id)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return res.status(500).json(error)
-  }
-
-  res.json(data)
-})
-
-app.post("/api/play", async (req, res) => {
-  const { amp_id, asset_id } = req.body
-
-  await supabase
-    .from("amplifiers")
     .update({
-      current_asset_id: asset_id
+      online: true,
+      last_seen: new Date().toISOString()
     })
-    .eq("amp_id", amp_id)
+    .eq("game_id", game_id)
+    .eq("amp_id", amp_id);
 
-  res.json({ success: true })
-})
+  if (error) return res.status(500).json({ error });
 
+  res.json({ ok: true });
+});
+
+
+// ======================================================
+// CLEANUP OFFLINE AMPS
+// ======================================================
 setInterval(async () => {
-  const offlineCutoff = new Date(Date.now() - 15000).toISOString()
-  const deleteCutoff = new Date(Date.now() - 60000).toISOString()
+  const cutoff = new Date(Date.now() - 60000).toISOString();
 
-  // 1. mark offline quickly
-  await supabase
-    .from("amplifiers")
-    .update({ online: false })
-    .lt("last_seen", offlineCutoff)
-
-  // 2. delete after longer inactivity
   const { error } = await supabase
     .from("amplifiers")
     .delete()
-    .lt("last_seen", deleteCutoff)
+    .lt("last_seen", cutoff);
 
-  if (error) {
-    console.error("Cleanup delete error:", error)
-  }
-}, 10000)
+  if (error) console.error("cleanup error:", error);
 
-const PORT = process.env.PORT || 3001
+}, 10000);
 
+
+// ======================================================
 app.listen(PORT, () => {
-  console.log(`Control1 API running on port ${PORT}`)
-})
+  console.log(`Server running on port ${PORT}`);
+});
