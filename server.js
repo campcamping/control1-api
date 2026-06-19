@@ -55,7 +55,7 @@ app.post("/api/update", async (req, res) => {
       muted,
       current_asset_id,
       online: true,
-      last_seen: new Date()
+      last_seen: new Date().toISOString()
     })
     .eq("amp_id", amp_id)
     .eq("game_id", game_id)
