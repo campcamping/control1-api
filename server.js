@@ -44,30 +44,44 @@ app.post("/api/register", async (req, res) => {
 })
 
 app.post("/api/update", async (req, res) => {
-  const { game_id, amp_id, volume, bass, treble, muted, current_asset_id  } = req.body
+  try {
+    const { game_id, amp_id, volume, muted, bass, treble, current_asset_id } = req.body
 
-  console.log("UPDATE REQUEST:", req.body)
-  
-  await supabase
-    .from("amplifiers")
-    .update({
-      volume,
-      bass,
-      treble,
-      muted,
-      current_asset_id,
+    console.log("UPDATE REQUEST:", req.body)
+
+    const updateData = {
       online: true,
       last_seen: new Date().toISOString()
+    }
+
+    if (volume !== undefined) updateData.volume = volume
+    if (muted !== undefined) updateData.muted = muted
+    if (bass !== undefined) updateData.bass = bass
+    if (treble !== undefined) updateData.treble = treble
+    if (current_asset_id !== undefined) updateData.current_asset_id = current_asset_id
+
+    const { data, error } = await supabase
+      .from("amplifiers")
+      .update(updateData)
+      .eq("game_id", game_id)
+      .eq("amp_id", amp_id)
+
+    if (error) {
+      console.log("SUPABASE ERROR:", error)
+      return res.status(500).json({ error })
+    }
+
+    return res.json({
+      success: true,
+      data
     })
-    .eq("amp_id", amp_id)
-    .eq("game_id", game_id)
 
-  if (error) {
-    console.log("UPDATE ERROR:", error)
-    return res.status(500).json({ error })
+  } catch (err) {
+    console.log("SERVER CRASH:", err)
+    return res.status(500).json({
+      error: err.message
+    })
   }
-
-  res.json({ success: true })
 })
 
 app.get("/api/amplifiers", async (req, res) => {
