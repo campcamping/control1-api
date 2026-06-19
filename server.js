@@ -1,20 +1,27 @@
-import express from "express";
-import cors from "cors";
-import { createClient } from "@supabase/supabase-js";
+const express = require("express");
+const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
+// =====================
+// SUPABASE
+// =====================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
+// =====================
+// CONFIG
+// =====================
 const PORT = process.env.PORT || 3000;
 
 // =====================
-// HEALTH
+// HEALTH CHECK
 // =====================
 app.get("/", (req, res) => {
   res.json({ status: "ok" });
@@ -24,7 +31,7 @@ app.get("/", (req, res) => {
 // ZONES
 // ======================================================
 
-// GET ZONES
+// GET ALL ZONES
 app.get("/api/zones", async (req, res) => {
   const { game_id } = req.query;
 
@@ -65,6 +72,10 @@ app.post("/api/zone/update", async (req, res) => {
     playback
   } = req.body;
 
+  if (!zone_code) {
+    return res.status(400).json({ error: "zone_code required" });
+  }
+
   const { error } = await supabase
     .from("zones")
     .update({
@@ -84,29 +95,51 @@ app.post("/api/zone/update", async (req, res) => {
 });
 
 // ======================================================
-// PARTY MODE
+// GET ZONE STATE (ROBLOX + DASHBOARD)
 // ======================================================
-app.post("/api/party/activate", async (req, res) => {
-  const { group_id } = req.body;
+app.get("/api/zone/state", async (req, res) => {
+  const { zone_code } = req.query;
 
-  const { data: zones } = await supabase
-    .from("zone_group_members")
-    .select("zone_code")
-    .eq("group_id", group_id);
+  if (!zone_code) {
+    return res.status(400).json({ error: "zone_code required" });
+  }
 
-  const zoneCodes = zones.map(z => z.zone_code);
-
-  const { error } = await supabase
+  const { data: zone, error } = await supabase
     .from("zones")
-    .update({
-      muted: false,
-      master_volume: 70
-    })
-    .in("zone_code", zoneCodes);
+    .select("*")
+    .eq("zone_code", zone_code)
+    .single();
 
   if (error) return res.status(500).json({ error });
 
-  res.json({ success: true });
+  const { data: members, error: mErr } = await supabase
+    .from("zone_members")
+    .select("*")
+    .eq("zone_code", zone_code);
+
+  if (mErr) return res.status(500).json({ error: mErr });
+
+  res.json({ zone, members });
+});
+
+// ======================================================
+// HEARTBEAT (ROBLOX)
+// ======================================================
+app.post("/api/heartbeat", async (req, res) => {
+  const { game_id, amp_id } = req.body;
+
+  const { error } = await supabase
+    .from("amplifiers")
+    .update({
+      online: true,
+      last_seen: new Date().toISOString()
+    })
+    .eq("game_id", game_id)
+    .eq("amp_id", amp_id);
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ ok: true });
 });
 
 // ======================================================
@@ -140,47 +173,29 @@ app.post("/api/zone/member/remove", async (req, res) => {
 });
 
 // ======================================================
-// GET ZONE STATE
+// PARTY MODE
 // ======================================================
-app.get("/api/zone/state", async (req, res) => {
-  const { zone_code } = req.query;
+app.post("/api/party/activate", async (req, res) => {
+  const { group_id } = req.body;
 
-  const { data: zone, error } = await supabase
-    .from("zones")
-    .select("*")
-    .eq("zone_code", zone_code)
-    .single();
+  const { data: zones } = await supabase
+    .from("zone_group_members")
+    .select("zone_code")
+    .eq("group_id", group_id);
 
-  if (error) return res.status(500).json({ error });
-
-  const { data: members, error: mErr } = await supabase
-    .from("zone_members")
-    .select("*")
-    .eq("zone_code", zone_code);
-
-  if (mErr) return res.status(500).json({ error: mErr });
-
-  res.json({ zone, members });
-});
-
-// ======================================================
-// HEARTBEAT
-// ======================================================
-app.post("/api/heartbeat", async (req, res) => {
-  const { game_id, amp_id } = req.body;
+  const zoneCodes = zones.map(z => z.zone_code);
 
   const { error } = await supabase
-    .from("amplifiers")
+    .from("zones")
     .update({
-      online: true,
-      last_seen: new Date().toISOString()
+      muted: false,
+      master_volume: 70
     })
-    .eq("game_id", game_id)
-    .eq("amp_id", amp_id);
+    .in("zone_code", zoneCodes);
 
   if (error) return res.status(500).json({ error });
 
-  res.json({ ok: true });
+  res.json({ success: true });
 });
 
 // ======================================================
@@ -232,14 +247,21 @@ app.post("/api/queue/add", async (req, res) => {
 app.post("/api/queue/next", async (req, res) => {
   const { zone_code } = req.body;
 
-  const { data: queue } = await supabase
+  if (!zone_code) {
+    return res.status(400).json({ error: "zone_code required" });
+  }
+
+  const { data: queue, error } = await supabase
     .from("zone_queue")
     .select("*")
     .eq("zone_code", zone_code)
     .order("position");
 
-  if (!queue || queue.length === 0)
+  if (error) return res.status(500).json({ error });
+
+  if (!queue || queue.length === 0) {
     return res.json({ message: "empty queue" });
+  }
 
   const next = queue[0];
 
@@ -259,7 +281,7 @@ app.post("/api/queue/next", async (req, res) => {
 });
 
 // ======================================================
-// CLEANUP
+// CLEANUP OFFLINE AMPS
 // ======================================================
 setInterval(async () => {
   const cutoff = new Date(Date.now() - 60000).toISOString();
@@ -271,6 +293,34 @@ setInterval(async () => {
 
   if (error) console.error("cleanup error:", error);
 }, 10000);
+
+// ======================================================
+// PLAYBACK DRIFT CORRECTION
+// ======================================================
+setInterval(async () => {
+  const { data: zones } = await supabase
+    .from("zones")
+    .select("*");
+
+  for (const zone of zones || []) {
+    if (!zone.playback?.is_playing) continue;
+
+    const started = new Date(zone.playback.started_at).getTime();
+    const now = Date.now();
+
+    const position = (now - started) / 1000;
+
+    await supabase
+      .from("zones")
+      .update({
+        playback: {
+          ...zone.playback,
+          position
+        }
+      })
+      .eq("zone_code", zone.zone_code);
+  }
+}, 5000);
 
 // ======================================================
 app.listen(PORT, () => {
