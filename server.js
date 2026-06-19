@@ -44,7 +44,7 @@ app.post("/api/register", async (req, res) => {
 })
 
 app.post("/api/update", async (req, res) => {
-  const { game_id, amp_id, volume, bass, treble, muted, asset_id } = req.body
+  const { game_id, amp_id, volume, bass, treble, muted, current_asset_id  } = req.body
 
   await supabase
     .from("amplifiers")
@@ -53,13 +53,17 @@ app.post("/api/update", async (req, res) => {
       bass,
       treble,
       muted,
-      current_asset_id: asset_id,
-      last_seen: new Date(),
+      current_asset_id,
       online: true,
       last_seen: new Date()
     })
     .eq("amp_id", amp_id)
     .eq("game_id", game_id)
+
+  if (error) {
+    console.log("UPDATE ERROR:", error)
+    return res.status(500).json({ error })
+  }
 
   res.json({ success: true })
 })
