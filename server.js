@@ -76,3 +76,9 @@ app.post("/api/play", async (req, res) => {
 
   res.json({ success: true })
 })
+
+const PORT = process.env.PORT || 3001
+
+app.listen(PORT, () => {
+  console.log(`Control1 API running on port ${PORT}`)
+})
