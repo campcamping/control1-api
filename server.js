@@ -119,17 +119,26 @@ app.post("/api/play", async (req, res) => {
 })
 
 setInterval(async () => {
-  const cutoff = new Date(Date.now() - 15000).toISOString()
+  const offlineCutoff = new Date(Date.now() - 15000).toISOString()
+  const deleteCutoff = new Date(Date.now() - 60000).toISOString()
 
-  const { error } = await supabase
+  // 1. mark offline quickly
+  await supabase
     .from("amplifiers")
     .update({ online: false })
-    .lt("last_seen", cutoff)
+    .lt("last_seen", offlineCutoff)
+
+  // 2. delete after longer inactivity
+  const { error } = await supabase
+    .from("amplifiers")
+    .delete()
+    .lt("last_seen", deleteCutoff)
 
   if (error) {
-    console.error("Offline cleanup error:", error)
+    console.error("Cleanup delete error:", error)
   }
-}, 5000)
+}, 10000)
+
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
