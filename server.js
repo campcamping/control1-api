@@ -26,7 +26,7 @@ app.post("/api/register", async (req, res) => {
       name,
       zone,
       online: true,
-      last_seen: new Date()
+      last_seen: new Date().toISOString()
     })
 
   if (error) {
@@ -46,6 +46,8 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/update", async (req, res) => {
   const { game_id, amp_id, volume, bass, treble, muted, current_asset_id  } = req.body
 
+  console.log("UPDATE REQUEST:", req.body)
+  
   await supabase
     .from("amplifiers")
     .update({
@@ -103,7 +105,7 @@ app.post("/api/play", async (req, res) => {
 })
 
 setInterval(async () => {
-  const cutoff = new Date(Date.now() - 15000)
+  const cutoff = new Date(Date.now() - 15000).toISOString()
 
   const { error } = await supabase
     .from("amplifiers")
@@ -114,7 +116,6 @@ setInterval(async () => {
     console.error("Offline cleanup error:", error)
   }
 }, 5000)
-
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
