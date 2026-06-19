@@ -44,7 +44,7 @@ app.post("/api/register", async (req, res) => {
 })
 
 app.post("/api/update", async (req, res) => {
-  const { amp_id, volume, bass, treble, muted, asset_id } = req.body
+  const { game_id, amp_id, volume, bass, treble, muted, asset_id } = req.body
 
   await supabase
     .from("amplifiers")
@@ -54,9 +54,12 @@ app.post("/api/update", async (req, res) => {
       treble,
       muted,
       current_asset_id: asset_id,
+      last_seen: new Date(),
+      online: true,
       last_seen: new Date()
     })
     .eq("amp_id", amp_id)
+    .eq("game_id", game_id)
 
   res.json({ success: true })
 })
