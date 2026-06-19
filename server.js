@@ -77,7 +77,7 @@ app.post("/api/zone/update", async (req, res) => {
       playback,
       updated_at: new Date().toISOString()
     })
-    .eq("id", zone_id);
+    .eq("zone_code", zone_code);
 
   if (error) return res.status(500).json({ error });
 
@@ -145,29 +145,22 @@ app.post("/api/zone/member/remove", async (req, res) => {
 // GET FULL ZONE STATE (IMPORTANT NEW ENDPOINT)
 // ======================================================
 app.get("/api/zone/state", async (req, res) => {
-  const { zone_id } = req.query;
+  const { zone_code } = req.query;
 
-  // zone
-  const { data: zone, error: zoneError } = await supabase
+  const { data: zone, error } = await supabase
     .from("zones")
     .select("*")
-    .eq("id", zone_id)
+    .eq("zone_code", zone_code)
     .single();
 
-  if (zoneError) return res.status(500).json({ error: zoneError });
+  if (error) return res.status(500).json({ error });
 
-  // members
-  const { data: members, error: memberError } = await supabase
+  const { data: members } = await supabase
     .from("zone_members")
     .select("*")
-    .eq("zone_id", zone_id);
+    .eq("zone_code", zone_code);
 
-  if (memberError) return res.status(500).json({ error: memberError });
-
-  res.json({
-    zone,
-    members
-  });
+  res.json({ zone, members });
 });
 
 
@@ -250,7 +243,7 @@ app.post("/api/queue/next", async (req, res) => {
     .update({
       current_asset_id: next.asset_id
     })
-    .eq("id", zone_id);
+    .eq("zone_code", zone_code);
 
   await supabase
     .from("zone_queue")
