@@ -123,26 +123,28 @@ app.post("/api/zone/update", async (req, res) => {
 app.get("/api/zone/state", async (req, res) => {
   const { zone_code } = req.query;
 
-  if (!zone_code) {
-    return res.status(400).json({ error: "zone_code required" });
-  }
-
   const { data: zone, error } = await supabase
     .from("zones")
     .select("*")
     .eq("zone_code", zone_code)
     .single();
 
-  if (error) return res.status(500).json({ error });
+  if (error)
+    return res.status(500).json({ error });
 
-  const { data: members, error: mErr } = await supabase
-    .from("zone_members")
-    .select("*")
-    .eq("zone_code", zone_code);
+  const { data: members, error: membersError } =
+    await supabase
+      .from("zone_members")
+      .select("*")
+      .eq("zone_id", zone.id);
 
-  if (mErr) return res.status(500).json({ error: mErr });
+  if (membersError)
+    return res.status(500).json({ error: membersError });
 
-  res.json({ zone, members });
+  res.json({
+    zone,
+    members
+  });
 });
 
 // ======================================================
