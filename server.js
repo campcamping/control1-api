@@ -27,6 +27,40 @@ app.get("/", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.post("/api/amp/register", async (req, res) => {
+  const { game_id, amp_id, zone_code } = req.body;
+
+  const { data: zone } = await supabase
+    .from("zones")
+    .select("id")
+    .eq("zone_code", zone_code)
+    .single();
+
+  if (!zone)
+    return res.status(404).json({ error: "Zone not found" });
+
+  // upsert amp
+  await supabase.from("amplifiers").upsert({
+    game_id,
+    amp_id,
+    zone_code,
+    online: true,
+    last_seen: new Date().toISOString()
+  });
+
+  // ensure zone membership exists
+  const { error } = await supabase
+    .from("zone_members")
+    .upsert({
+      zone_id: zone.id,
+      amp_id
+    });
+
+  if (error) return res.status(500).json({ error });
+
+  res.json({ success: true });
+});
+
 // ======================================================
 // ZONES
 // ======================================================
