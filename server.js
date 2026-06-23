@@ -103,7 +103,7 @@ app.post("/api/zone/create", async (req, res) => {
         zone_code,
         master_volume: 50,
         muted: false,
-        current_asset_id: null,
+        source_code: null,
         bass: 0,
         treble: 0,
         playback: { is_playing: false }
@@ -120,14 +120,14 @@ app.post("/api/zone/create", async (req, res) => {
 // UPDATE ZONE (MAIN CONTROL)
 app.post("/api/zone/update", async (req, res) => {
   const {
-    zone_code,
-    master_volume,
-    muted,
-    current_asset_id,
-    bass,
-    treble,
-    playback
-  } = req.body;
+  zone_code,
+  master_volume,
+  muted,
+  source_code,
+  bass,
+  treble,
+  playback
+} = req.body;
 
   if (!zone_code) {
     return res.status(400).json({ error: "zone_code required" });
@@ -138,7 +138,7 @@ app.post("/api/zone/update", async (req, res) => {
     .update({
       master_volume,
       muted,
-      current_asset_id,
+      source_code,
       bass,
       treble,
       playback,
@@ -159,7 +159,13 @@ app.get("/api/zone/state", async (req, res) => {
 
   const { data: zone, error } = await supabase
     .from("zones")
-    .select("*")
+  .select(`
+    *,
+    audio_sources (
+      source_code,
+      name
+    )
+  `)
     .eq("zone_code", zone_code)
     .single();
 
@@ -432,6 +438,16 @@ setInterval(async () => {
   }
 }, 5000);
 
+setInterval(async () => {
+  const cutoff =
+    new Date(Date.now() - 60000).toISOString();
+
+  await supabase
+    .from("audio_sources")
+    .delete()
+    .lt("last_seen", cutoff);
+
+}, 10000);
 // ======================================================
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
