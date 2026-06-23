@@ -232,6 +232,57 @@ app.post("/api/zone/member/remove", async (req, res) => {
 });
 
 // ======================================================
+// SOURCES
+// ======================================================
+
+// REGISTER SOURCE
+app.post("/api/source/register", async (req, res) => {
+  const {
+    game_id,
+    source_code,
+    name
+  } = req.body;
+
+  const { data, error } = await supabase
+    .from("audio_sources")
+    .upsert(
+      [{
+        game_id,
+        source_code,
+        name,
+        online: true,
+        last_seen: new Date().toISOString()
+      }],
+      {
+        onConflict: "game_id,source_code"
+      }
+    )
+    .select()
+    .single();
+
+  if (error)
+    return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+// GET SOURCES
+app.get("/api/sources", async (req, res) => {
+  const { game_id } = req.query;
+
+  const { data, error } = await supabase
+    .from("audio_sources")
+    .select("*")
+    .eq("game_id", game_id)
+    .order("name");
+
+  if (error)
+    return res.status(500).json({ error });
+
+  res.json(data);
+});
+
+// ======================================================
 // PARTY MODE
 // ======================================================
 app.post("/api/party/activate", async (req, res) => {
